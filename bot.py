@@ -1,92 +1,135 @@
 import os
-import re
-import requests
-from telebot import TeleBot, types
-from instaloader import Instaloader, Post
+import google.generativeai as genai
+from telebot import TeleBot
 
-# ======== تنظیمات ========
+# ======== دریافت توکن‌ها از محیط ========
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
 if not BOT_TOKEN:
-    raise ValueError("❌ BOT_TOKEN پیدا نشد!")
+    raise ValueError("❌ BOT_TOKEN پیدا نشد! توی Render تنظیمش کن.")
+if not GEMINI_API_KEY:
+    raise ValueError("❌ GEMINI_API_KEY پیدا نشد! توی Render تنظیمش کن.")
 
 bot = TeleBot(BOT_TOKEN)
+genai.configure(api_key=GEMINI_API_KEY)
 
-# ======== دانلودر اینستاگرام (بدون لاگین) ========
-def download_instagram(url):
+# ======== شخصیت متخصص اینستاگرام ========
+PERSONALITY = """تو یک متخصص حرفه‌ای تولید محتوای اینستاگرام هستی با ۱۰ سال سابقه.
+
+ویژگی‌های تو:
+- استراتژی‌های عملی و کاربردی ارائه می‌دی
+- کپشن‌های جذاب و فروشنده می‌نویسی (۳ سبک مختلف: عاطفی، فروشنده، طنز)
+- هشتگ‌های طلایی و پرسرچ معرفی می‌کنی (۳۰ تا: ۱۰ پرسرچ، ۱۰ متوسط، ۱۰ اختصاصی)
+- ایده‌های خلاقانه برای ریلز و استوری می‌دی (۵ ایده متنوع)
+- ساده و صمیمی صحبت می‌کنی، نه خشک و آکادمیک
+- همیشه از مثال واقعی و کاربردی استفاده می‌کنی
+- با ایموجی و لحن دوستانه جواب می‌دی
+- هیچوقت جواب‌های کلی و تکراری نمی‌دی
+
+مهم: همیشه جواب‌هات رو دسته‌بندی و منظم بنویس تا کاربر راحت بخونه.
+"""
+
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+# ======== تابع ارسال به جمنای ========
+def ask_gemini(prompt):
     try:
-        L = Instaloader()
-        # فقط دانلود کن، هیچ چیز اضافی ذخیره نکن
-        L.save_metadata = False
-        L.post_metadata_txt_pattern = ""
-        
-        # گرفتن shortcode از لینک
-        if "/p/" in url:
-            shortcode = url.split("/p/")[1].split("/")[0]
-        elif "/reel/" in url:
-            shortcode = url.split("/reel/")[1].split("/")[0]
-        elif "/tv/" in url:
-            shortcode = url.split("/tv/")[1].split("/")[0]
-        else:
-            return None, "لینک پشتیبانی نمی‌شود"
-        
-        # دریافت پست بدون لاگین
-        post = Post.from_shortcode(L.context, shortcode)
-        L.download_post(post, target="temp")
-        
-        # پیدا کردن فایل دانلود شده
-        files = os.listdir("temp")
-        if files:
-            file_path = os.path.join("temp", files[0])
-            return file_path, post.is_video
-        return None, None
-    
+        response = model.generate_content(f"{PERSONALITY}\n\nدرخواست کاربر:\n{prompt}")
+        return response.text[:4000]  # محدودیت تلگرام
     except Exception as e:
-        return None, str(e)
+        return f"❌ خطا در ارتباط با جمنای: {e}"
 
 # ======== دستور استارت ========
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "🎯 لینک اینستاگرام رو بفرست تا برات دانلود کنم.\nفقط پست‌های عمومی!")
+    bot.reply_to(message,
+        "📱 **به مشاور تولید محتوای اینستاگرام خوش اومدی!**\n\n"
+        "از من بپرس:\n"
+        "• `/idea موضوع` → ایده برای پست/ریلز\n"
+        "• `/caption موضوع` → کپشن حرفه‌ای\n"
+        "• `/hashtag موضوع` → هشتگ‌های طلایی\n"
+        "• `/strategy نوع پیج` → استراتژی رشد\n"
+        "• `/analyze توضیح پیج` → تحلیل محتوا\n\n"
+        "یا هر سوالی داری، مستقیم بپرس! 🚀"
+    )
 
-# ======== دریافت لینک ========
-@bot.message_handler(func=lambda m: True)
-def handle_link(message):
-    text = message.text
-    
-    # چک کردن لینک اینستاگرام
-    pattern = r'(https?://(?:www\.)?instagram\.com/(?:p|reel|tv|stories)/[A-Za-z0-9_-]+)'
-    match = re.search(pattern, text)
-    
-    if not match:
-        bot.reply_to(message, "❌ لینک معتبر اینستاگرام نیست!")
+# ======== راهنما ========
+@bot.message_handler(commands=['help'])
+def help_command(message):
+    bot.reply_to(message,
+        "📚 **راهنمای استفاده:**\n\n"
+        "`/idea [موضوع]` → ۵ ایده خلاقانه\n"
+        "`/caption [موضوع]` → ۳ کپشن جذاب\n"
+        "`/hashtag [موضوع]` → ۳۰ هشتگ طلایی\n"
+        "`/strategy [نوع پیج]` → برنامه ۳۰ روزه رشد\n"
+        "`/analyze [توضیح پیج]` → تحلیل نقاط قوت/ضعف\n\n"
+        "مثال: `/idea مد لباس`"
+    )
+
+# ======== ایده ========
+@bot.message_handler(commands=['idea'])
+def get_idea(message):
+    topic = message.text.replace('/idea', '').strip()
+    if not topic:
+        bot.reply_to(message, "❌ موضوع رو مشخص کن!\nمثال: `/idea مد لباس`")
         return
-    
-    url = match.group(1)
-    msg = bot.reply_to(message, "⏳ در حال دانلود...")
-    
-    # دانلود
-    file_path, is_video = download_instagram(url)
-    
-    if file_path and os.path.exists(file_path):
-        try:
-            with open(file_path, 'rb') as f:
-                if is_video:
-                    bot.send_video(message.chat.id, f)
-                else:
-                    bot.send_photo(message.chat.id, f)
-            
-            # پاک کردن فایل
-            os.remove(file_path)
-            os.rmdir("temp")
-            bot.delete_message(message.chat.id, msg.message_id)
-            
-        except Exception as e:
-            bot.reply_to(message, f"❌ خطا در ارسال: {e}")
-    else:
-        bot.reply_to(message, f"❌ دانلود ناموفق! خطا: {file_path}")
+    msg = bot.reply_to(message, "⏳ در حال تولید ایده...")
+    result = ask_gemini(f"برای موضوع '{topic}'، ۵ ایده خلاقانه برای ریلز و پست بده.")
+    bot.edit_message_text(result, message.chat.id, msg.message_id)
+
+# ======== کپشن ========
+@bot.message_handler(commands=['caption'])
+def get_caption(message):
+    topic = message.text.replace('/caption', '').strip()
+    if not topic:
+        bot.reply_to(message, "❌ موضوع رو مشخص کن!\nمثال: `/caption قهوه صبح`")
+        return
+    msg = bot.reply_to(message, "⏳ در حال نوشتن کپشن...")
+    result = ask_gemini(f"برای موضوع '{topic}'، ۳ کپشن جذاب با سبک‌های عاطفی، فروشنده و طنز بنویس.")
+    bot.edit_message_text(result, message.chat.id, msg.message_id)
+
+# ======== هشتگ ========
+@bot.message_handler(commands=['hashtag'])
+def get_hashtag(message):
+    topic = message.text.replace('/hashtag', '').strip()
+    if not topic:
+        bot.reply_to(message, "❌ موضوع رو مشخص کن!\nمثال: `/hashtag فیتنس`")
+        return
+    msg = bot.reply_to(message, "⏳ در حال تولید هشتگ...")
+    result = ask_gemini(f"برای موضوع '{topic}'، ۳۰ هشتگ طلایی (۱۰ پرسرچ، ۱۰ متوسط، ۱۰ اختصاصی) بده.")
+    bot.edit_message_text(result, message.chat.id, msg.message_id)
+
+# ======== استراتژی ========
+@bot.message_handler(commands=['strategy'])
+def get_strategy(message):
+    topic = message.text.replace('/strategy', '').strip()
+    if not topic:
+        bot.reply_to(message, "❌ نوع پیج رو مشخص کن!\nمثال: `/strategy پیج آشپزی`")
+        return
+    msg = bot.reply_to(message, "⏳ در حال طراحی استراتژی...")
+    result = ask_gemini(f"برای یه پیج '{topic}'، یه استراتژی ۳۰ روزه برای رشد و افزایش تعامل ارائه بده.")
+    bot.edit_message_text(result, message.chat.id, msg.message_id)
+
+# ======== تحلیل ========
+@bot.message_handler(commands=['analyze'])
+def analyze(message):
+    topic = message.text.replace('/analyze', '').strip()
+    if not topic:
+        bot.reply_to(message, "❌ توضیح پیج رو بده!\nمثال: `/analyze پیج فلان`")
+        return
+    msg = bot.reply_to(message, "⏳ در حال تحلیل...")
+    result = ask_gemini(f"این پیج رو تحلیل کن: {topic}\nنقاط قوت، ضعف، و راهکارهای بهبود رو بگو.")
+    bot.edit_message_text(result, message.chat.id, msg.message_id)
+
+# ======== پیام‌های معمولی ========
+@bot.message_handler(func=lambda m: True)
+def chat(message):
+    msg = bot.reply_to(message, "⏳ در حال فکر کردن...")
+    result = ask_gemini(message.text)
+    bot.edit_message_text(result, message.chat.id, msg.message_id)
 
 # ======== اجرا ========
 if __name__ == "__main__":
-    os.makedirs("temp", exist_ok=True)
-    print("🤖 ربات روشن شد...")
+    print("🤖 ربات مشاور اینستاگرام روشن شد...")
     bot.infinity_polling()
