@@ -5,24 +5,25 @@ from telebot import TeleBot, types
 from instaloader import Instaloader, Post
 
 # ======== تنظیمات ========
-BOT_TOKEN = "8808018168:AAE100BK0sM--JUeE4oPJo5NlDgxWgp2l_Q"  # از @BotFather بگیر
+BOT_TOKEN = "توکن_جدیدی_که_از_BotFather_میگیری"  # الان عوضش کن!
 bot = TeleBot(BOT_TOKEN)
+
+# ======== اطلاعات ورود به اینستاگرام ========
+INSTA_USERNAME = "Sedaye_you"
+INSTA_PASSWORD = "Q1w2e3r4h."
 
 # ======== دانلودر اینستاگرام ========
 def download_instagram(url):
     try:
         L = Instaloader()
-        # فقط دانلود کن، هیچ چیز اضافی ذخیره نکن
+        L.login(INSTA_USERNAME, INSTA_PASSWORD)
         L.save_metadata = False
         L.post_metadata_txt_pattern = ""
         
-        # دریافت پست
-        post = Post.from_shortcode(L.context, url.split("/p/")[1].split("/")[0])
-        
-        # دانلود
+        shortcode = url.split("/p/")[1].split("/")[0]
+        post = Post.from_shortcode(L.context, shortcode)
         L.download_post(post, target="temp")
         
-        # پیدا کردن فایل دانلود شده
         files = os.listdir("temp")
         if files:
             file_path = os.path.join("temp", files[0])
@@ -32,17 +33,13 @@ def download_instagram(url):
     except Exception as e:
         return None, str(e)
 
-# ======== دستور استارت ========
 @bot.message_handler(commands=['start'])
 def start(message):
     bot.reply_to(message, "🎯 لینک اینستاگرام رو بفرست تا برات دانلود کنم.")
 
-# ======== دریافت لینک ========
 @bot.message_handler(func=lambda m: True)
 def handle_link(message):
     text = message.text
-    
-    # چک کردن لینک اینستاگرام
     pattern = r'(https?://(?:www\.)?instagram\.com/(?:p|reel|tv|stories)/[A-Za-z0-9_-]+)'
     match = re.search(pattern, text)
     
@@ -53,7 +50,6 @@ def handle_link(message):
     url = match.group(1)
     msg = bot.reply_to(message, "⏳ در حال دانلود...")
     
-    # دانلود
     file_path, is_video = download_instagram(url)
     
     if file_path and os.path.exists(file_path):
@@ -64,7 +60,6 @@ def handle_link(message):
                 else:
                     bot.send_photo(message.chat.id, f)
             
-            # پاک کردن فایل
             os.remove(file_path)
             os.rmdir("temp")
             bot.delete_message(message.chat.id, msg.message_id)
@@ -72,9 +67,8 @@ def handle_link(message):
         except Exception as e:
             bot.reply_to(message, f"❌ خطا در ارسال: {e}")
     else:
-        bot.reply_to(message, "❌ دانلود ناموفق! لینک رو چک کن.")
+        bot.reply_to(message, f"❌ دانلود ناموفق! خطا: {file_path}")
 
-# ======== اجرا ========
 if __name__ == "__main__":
     os.makedirs("temp", exist_ok=True)
     print("🤖 ربات روشن شد...")
