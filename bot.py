@@ -5,7 +5,10 @@ from telebot import TeleBot, types
 from instaloader import Instaloader, Post
 
 # ======== تنظیمات ========
-BOT_TOKEN = "توکن_جدیدی_که_از_BotFather_میگیری"  # الان عوضش کن!
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise ValueError("❌ BOT_TOKEN پیدا نشد!")
+
 bot = TeleBot(BOT_TOKEN)
 
 # ======== اطلاعات ورود به اینستاگرام ========
